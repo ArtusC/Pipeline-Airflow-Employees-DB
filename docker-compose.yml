@@ -1,0 +1,71 @@
+version: '3.0'
+services:
+    database:
+        image: mysql:5.7
+        container_name: mysqldb
+        build: .
+        command: "--innodb_use_native_aio=0"
+        volumes:
+            #- ./storage_db:/var/lib/mysql:rw
+            - "./employees_db:/docker-entrypoint-initdb.d/"
+        ports:
+            - '3308:3306'
+        networks:
+            net: 
+                ipv4_address: 10.5.0.5
+        environment:
+            - MYSQL_ROOT_PASSWORD=bootcamp
+        
+    datalake:
+        image: minio/minio
+        container_name: minio
+        ports:
+           - '9002:9000'
+           - '9003:9001'
+        networks:
+            net: 
+                ipv4_address: 10.5.0.6
+        volumes:
+           - ./datalake:/data
+        command: minio server /data --console-address ":9001"    
+        depends_on:
+          - database   
+
+    scheduler:
+        image: 'apache/airflow:2.1.1-python3.8'
+        container_name: airflow
+        ports:
+            - '8081:8080'
+        volumes:
+            - ./airflow/dags:/opt/airflow/dags/
+            - ./airflow/logs:/opt/airflow/logs
+            - ./airflow/files:/opt/airflow/files
+        entrypoint: "/bin/sh -c"
+        networks:
+            net:
+        command:
+            - -c
+            - |
+                airflow db init
+                airflow users create --username admin --password stack --firstname Artus --lastname Lastname --role Admin --email admin@example.org
+                airflow webserver &
+                airflow variables set data_lake_server 10.5.0.6:9000 &
+                airflow variables set data_lake_login minioadmin &
+                airflow variables set data_lake_password minioadmin &
+                airflow variables set database_server 10.5.0.5 &
+                airflow variables set database_login root &
+                airflow variables set database_password bootcamp &
+                airflow variables set database_name employees &
+                pip install pymysql xlrd openpyxl minio &
+                airflow scheduler
+        depends_on:
+            - database
+            - datalake
+
+networks:
+    net:
+        driver: bridge
+        ipam:
+            config:
+                - subnet: 10.5.0.0/16
+                  gateway: 10.5.0.1               

@@ -1,0 +1,1 @@
+Serves to GitHub don't exclude the file 'curated' at the first time.
